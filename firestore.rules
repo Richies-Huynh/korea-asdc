@@ -1,0 +1,28 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // User profiles. Created and updated server-side via the Admin SDK, which
+    // bypasses these rules. Clients may only read their own profile.
+    match /users/{id} {
+      allow read: if isSignedIn() && request.auth.uid == id;
+      allow write: if false;
+    }
+
+    // Monitors. Written server-side via the Admin SDK. Clients read their own.
+    match /monitors/{id} {
+      allow read: if isSignedIn() && resource.data.user.id == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Detections. Written server-side via the Admin SDK. Clients read their own.
+    match /detections/{id} {
+      allow read: if isSignedIn() && resource.data.monitor.user.id == request.auth.uid;
+      allow write: if false;
+    }
+  }
+}
