@@ -67,3 +67,33 @@ export const Detection = {
   METHOD_HEURISTIC: "heuristic",
   COLLECTION: "detections",
 } as const;
+
+// A cited reference backing a historical fire event.
+export interface FireEventSource {
+  title: string;
+  publisher: string;
+  url: string;
+}
+
+// A historical, catastrophic fire in the Gwangju area. This is curated
+// reference content shipped in the codebase (see lib/fire-history.ts), not a
+// Firestore entity, so the const carries severity values but no COLLECTION.
+export interface FireEvent {
+  id: string;
+  title: string;
+  location_name: string;
+  latitude: number;
+  longitude: number;
+  occurred_at: number;
+  cause: string;
+  casualties: string;
+  severity: string;
+  summary: string;
+  sources: FireEventSource[];
+}
+
+export const FireEvent = {
+  SEVERITY_CATASTROPHIC: "catastrophic",
+  SEVERITY_MAJOR: "major",
+  SEVERITY_MODERATE: "moderate",
+} as const;
