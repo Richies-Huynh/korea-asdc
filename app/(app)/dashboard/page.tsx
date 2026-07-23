@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { buttonVariants } from "@/components/ui/button";
 import { MonitorGrid } from "@/components/monitor-grid";
 import { DetectionsFeed } from "@/components/detections-feed";
+import { ScansList } from "@/components/scans-list";
 
 export default async function DashboardPage() {
   const user = await getSession();
@@ -30,6 +31,7 @@ export default async function DashboardPage() {
           <DetectionsFeed />
         </div>
       </div>
+      <ScansList user={user} />
     </div>
   );
 }

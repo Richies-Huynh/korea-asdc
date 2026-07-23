@@ -31,6 +31,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Link href="/fire-history" className="text-muted-foreground hover:text-foreground">
                 Fire History
               </Link>
+              <Link href="/prevention" className="text-muted-foreground hover:text-foreground">
+                Prevention
+              </Link>
               <span className="hidden text-muted-foreground sm:inline">{user.display_name}</span>
               <SignOutButton />
             </nav>
