@@ -13,15 +13,28 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Monitors. Written server-side via the Admin SDK. Clients read their own.
+    // Monitors. Written server-side via the Admin SDK. The dashboard shows every
+    // monitor, so any signed-in user may read them all.
     match /monitors/{id} {
-      allow read: if isSignedIn() && resource.data.user.id == request.auth.uid;
+      allow read: if isSignedIn();
       allow write: if false;
     }
 
-    // Detections. Written server-side via the Admin SDK. Clients read their own.
+    // Live-view signaling. WebRTC offers, answers, and ICE candidates are
+    // exchanged client-side (there is no signaling server), so signed-in clients
+    // read and write these ephemeral session docs directly. The parent monitor
+    // doc stays read-only above.
+    match /monitors/{monitorId}/sessions/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /monitors/{monitorId}/sessions/{sessionId}/{candidates}/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Detections. Written server-side via the Admin SDK. The dashboard feed spans
+    // every monitor, so any signed-in user may read them all.
     match /detections/{id} {
-      allow read: if isSignedIn() && resource.data.monitor.user.id == request.auth.uid;
+      allow read: if isSignedIn();
       allow write: if false;
     }
   }

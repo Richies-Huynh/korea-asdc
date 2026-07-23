@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Detection, User } from "@/lib/types";
+import { Detection } from "@/lib/types";
 import {
   Card,
   CardContent,
@@ -13,15 +13,11 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-export function DetectionsFeed({ user }: { user: User }) {
+export function DetectionsFeed() {
   const [detections, setDetections] = useState<Detection[]>([]);
 
   useEffect(() => {
-    const detectionsQuery = query(
-      collection(db, Detection.COLLECTION),
-      where("monitor.user.id", "==", user.id),
-    );
-    const unsubscribe = onSnapshot(detectionsQuery, (snapshot) => {
+    const unsubscribe = onSnapshot(collection(db, Detection.COLLECTION), (snapshot) => {
       const rows = snapshot.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }) as Detection)
         .sort((first, second) => second.detected_at - first.detected_at)
@@ -29,13 +25,13 @@ export function DetectionsFeed({ user }: { user: User }) {
       setDetections(rows);
     });
     return () => unsubscribe();
-  }, [user.id]);
+  }, []);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Recent Detections</CardTitle>
-        <CardDescription>Fire events captured across your monitors.</CardDescription>
+        <CardDescription>Fire events captured across all monitors.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {detections.length === 0 ? (
