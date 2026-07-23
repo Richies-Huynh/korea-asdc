@@ -8,5 +8,11 @@ service firebase.storage {
     match /detections/{id} {
       allow read, write: if false;
     }
+
+    // Recorded prevention scans are written by the Admin SDK and served through
+    // the authenticated /api/scans/[id]/file route, so deny direct client access.
+    match /scans/{id} {
+      allow read, write: if false;
+    }
   }
 }

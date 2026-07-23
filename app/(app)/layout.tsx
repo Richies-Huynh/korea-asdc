@@ -24,6 +24,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/monitor" className="text-muted-foreground hover:text-foreground">
               Monitor
             </Link>
+            <Link href="/prevention" className="text-muted-foreground hover:text-foreground">
+              Prevention
+            </Link>
             <span className="hidden text-muted-foreground sm:inline">{user.display_name}</span>
             <SignOutButton />
           </nav>

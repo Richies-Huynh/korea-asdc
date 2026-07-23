@@ -24,5 +24,11 @@ service cloud.firestore {
       allow read: if isSignedIn() && resource.data.monitor.user.id == request.auth.uid;
       allow write: if false;
     }
+
+    // Prevention scans. Written server-side via the Admin SDK. Clients read their own.
+    match /scans/{id} {
+      allow read: if isSignedIn() && resource.data.user.id == request.auth.uid;
+      allow write: if false;
+    }
   }
 }
