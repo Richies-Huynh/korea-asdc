@@ -32,6 +32,8 @@ export const DetectorConfig = {
 export const Alert = {
   // Fallback used when FIRE_ALERT_COOLDOWN_SECONDS is not set.
   DEFAULT_COOLDOWN_SECONDS: 300,
+  // Minimum detection confidence required before an alert email is sent.
+  EMAIL_CONFIDENCE_THRESHOLD: 0.7,
 } as const;
 
 export const PreventionConfig = {

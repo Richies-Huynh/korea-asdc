@@ -43,8 +43,10 @@ export async function POST(request: NextRequest) {
 
   const now = Date.now();
   const cooldownSeconds = Number(process.env.FIRE_ALERT_COOLDOWN_SECONDS) || Alert.DEFAULT_COOLDOWN_SECONDS;
-  const shouldAlert =
+  const confidentEnough = Number.isFinite(confidence) && confidence >= Alert.EMAIL_CONFIDENCE_THRESHOLD;
+  const outsideCooldown =
     monitor.last_alert_at === null || now - monitor.last_alert_at >= cooldownSeconds * 1000;
+  const shouldAlert = confidentEnough && outsideCooldown;
 
   const detectionRef = adminDb.collection(Detection.COLLECTION).doc();
   const detection: Detection = {
@@ -61,8 +63,9 @@ export async function POST(request: NextRequest) {
   const file = adminStorage.bucket().file(`${Storage.PROOF_PREFIX}/${detectionRef.id}.jpg`);
   await file.save(buffer, { contentType: Storage.PROOF_CONTENT_TYPE });
 
-  // Email the alert only when outside the per-monitor cooldown, so a sustained
-  // fire does not send hundreds of emails. Every detection is still recorded.
+  // Email the alert only for confident detections that are outside the
+  // per-monitor cooldown, so low-confidence noise and a sustained fire do not
+  // send hundreds of emails. Every detection is still recorded.
   if (shouldAlert) {
     try {
       await sendFireAlert(monitor, detection, buffer);

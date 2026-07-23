@@ -51,8 +51,8 @@ export function DetectionsFeed() {
                   {new Date(detection.detected_at).toLocaleString()}
                 </p>
                 <div className="mt-1 flex items-center gap-2">
-                  <Badge variant="destructive">{Math.round(detection.confidence * 100)}% confidence</Badge>
-                  <Badge variant="outline">{detection.method}</Badge>
+                  <Badge variant="destructive" className="bg-destructive text-white dark:bg-destructive">{Math.round(detection.confidence * 100)}% confidence</Badge>
+                  <Badge variant="outline" className="bg-background">{detection.method}</Badge>
                   {detection.email_sent ? (
                     <Badge variant="secondary">Alerted</Badge>
                   ) : null}
