@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { onSnapshot, updateDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { createDetector, type DetectionResult, type Detector } from "@/lib/detector/detector";
+import { canFlipCamera, getCameraStream, oppositeFacingMode, type FacingMode } from "@/lib/camera";
 import { DetectorConfig } from "@/lib/constants";
 import { LiveSession, Monitor } from "@/lib/types";
 import {
@@ -25,8 +26,12 @@ interface MonitorContextValue {
   // The live camera stream, exposed so a page can preview it without owning it.
   stream: MediaStream | null;
   monitor: Monitor | null;
+  // Whether this device can switch between a front and rear camera, so a page
+  // can show a flip control only when it would do something.
+  canFlip: boolean;
   start: (name: string) => Promise<void>;
   stop: () => void;
+  flipCamera: () => Promise<void>;
 }
 
 const MonitorContext = createContext<MonitorContextValue | null>(null);
@@ -54,6 +59,9 @@ export function MonitorProvider({ children }: { children: React.ReactNode }) {
   const detectorRef = useRef<Detector | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const monitorRef = useRef<Monitor | null>(null);
+  // The lens currently in use, so a flip knows which one to switch to. Kept in a
+  // ref because the flip logic reads it outside of render.
+  const facingModeRef = useRef<FacingMode>("user");
   const rafRef = useRef<number | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reportingRef = useRef(false);
@@ -71,6 +79,7 @@ export function MonitorProvider({ children }: { children: React.ReactNode }) {
   const [viewerCount, setViewerCount] = useState(0);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [monitor, setMonitor] = useState<Monitor | null>(null);
+  const [canFlip, setCanFlip] = useState(false);
 
   // Tear down the peer connection for one viewer, whether they disconnected or
   // the monitor is stopping.
@@ -84,8 +93,13 @@ export function MonitorProvider({ children }: { children: React.ReactNode }) {
     setViewerCount(peersRef.current.size);
   }
 
-  // Answer a viewer's offer by streaming this device's camera to them.
-  async function answerViewer(session: LiveSession, monitorId: string, cameraStream: MediaStream) {
+  // Answer a viewer's offer by streaming this device's camera to them. Reads the
+  // live stream from the ref rather than a captured value, so viewers who join
+  // after a camera flip receive the current lens.
+  async function answerViewer(session: LiveSession, monitorId: string) {
+    const cameraStream = streamRef.current;
+    if (!cameraStream)
+      return;
     const peerConnection = new RTCPeerConnection(RTC_CONFIG);
     const unsubscribe = exchangeIceCandidates(
       peerConnection,
@@ -157,9 +171,10 @@ export function MonitorProvider({ children }: { children: React.ReactNode }) {
   async function start(name: string) {
     setStatus("starting");
     try {
-      const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const cameraStream = await getCameraStream(facingModeRef.current);
       streamRef.current = cameraStream;
       setStream(cameraStream);
+      setCanFlip(await canFlipCamera());
       const video = videoRef.current;
       if (video) {
         video.srcObject = cameraStream;
@@ -204,7 +219,7 @@ export function MonitorProvider({ children }: { children: React.ReactNode }) {
             return;
           if (Date.now() - session.created_at > LiveSession.STALE_AFTER_MS)
             return;
-          void answerViewer(session, registered.id, cameraStream);
+          void answerViewer(session, registered.id);
         });
       });
 
@@ -230,6 +245,37 @@ export function MonitorProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not start the monitor");
       stop();
+    }
+  }
+
+  // Switch between the front and rear camera in place. The new track is handed
+  // to every live viewer via replaceTrack, so no connection is renegotiated, and
+  // the detector keeps reading from the same hidden video.
+  async function flipCamera() {
+    const current = streamRef.current;
+    if (status !== "running" || !current)
+      return;
+    const next = oppositeFacingMode(facingModeRef.current);
+    let nextStream: MediaStream;
+    try {
+      nextStream = await getCameraStream(next);
+    } catch {
+      toast.error("Could not switch the camera");
+      return;
+    }
+    const nextTrack = nextStream.getVideoTracks()[0];
+    peersRef.current.forEach(({ peerConnection }) => {
+      const sender = peerConnection.getSenders().find((rtpSender) => rtpSender.track?.kind === "video");
+      void sender?.replaceTrack(nextTrack);
+    });
+    current.getTracks().forEach((track) => track.stop());
+    streamRef.current = nextStream;
+    facingModeRef.current = next;
+    setStream(nextStream);
+    const video = videoRef.current;
+    if (video) {
+      video.srcObject = nextStream;
+      await video.play();
     }
   }
 
@@ -262,6 +308,8 @@ export function MonitorProvider({ children }: { children: React.ReactNode }) {
     streamRef.current = null;
     detectorRef.current = null;
     monitorRef.current = null;
+    facingModeRef.current = "user";
+    setCanFlip(false);
     setStatus("idle");
     setDetectorMethod(null);
     setConfidence(0);
@@ -298,7 +346,7 @@ export function MonitorProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <MonitorContext.Provider
-      value={{ status, detectorMethod, confidence, alertCount, viewerCount, stream, monitor, start, stop }}
+      value={{ status, detectorMethod, confidence, alertCount, viewerCount, stream, monitor, canFlip, start, stop, flipCamera }}
     >
       <video
         ref={videoRef}

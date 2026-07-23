@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, CircleStop, Eye, Flame } from "lucide-react";
+import { Camera, CircleStop, Eye, Flame, SwitchCamera } from "lucide-react";
 import { useMonitor } from "@/components/monitor-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/card";
 
 export function MonitorView() {
-  const { status, detectorMethod, confidence, alertCount, viewerCount, stream, start, stop } = useMonitor();
+  const { status, detectorMethod, confidence, alertCount, viewerCount, stream, canFlip, start, stop, flipCamera } = useMonitor();
   const [name, setName] = useState("Laptop Monitor");
   const previewRef = useRef<HTMLVideoElement>(null);
 
@@ -54,6 +54,17 @@ export function MonitorView() {
                   </Badge>
                 ) : null}
               </div>
+            ) : null}
+            {running && canFlip ? (
+              <Button
+                size="icon"
+                variant="secondary"
+                onClick={flipCamera}
+                className="tooltip tooltip-left absolute right-3 top-3"
+                data-tooltip="Flip Camera"
+              >
+                <SwitchCamera />
+              </Button>
             ) : null}
           </div>
         </CardContent>

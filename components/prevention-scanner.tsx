@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, CircleStop, ShieldAlert } from "lucide-react";
+import { Camera, CircleStop, ShieldAlert, SwitchCamera } from "lucide-react";
 import { toast } from "sonner";
+import { canFlipCamera, getCameraStream, oppositeFacingMode, type FacingMode } from "@/lib/camera";
 import { PreventionConfig } from "@/lib/constants";
 import { Hazard } from "@/lib/types";
 import { HotRegionFinder, type NormalizedBox } from "@/lib/prevention/hot-regions";
@@ -37,6 +38,9 @@ export function PreventionScanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  // The recorder captures this canvas, not the camera directly, so flipping the
+  // camera mid-scan swaps only the source track while the recording continues.
+  const recordCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const finderRef = useRef<HotRegionFinder | null>(null);
@@ -52,11 +56,14 @@ export function PreventionScanner() {
   // Hazard labels already toasted, so a hazard re-detected each keyframe only
   // notifies once (mirrors the monitor's per-detection debounce).
   const seenRef = useRef<Set<string>>(new Set());
+  // The lens currently in use, so a flip knows which one to switch to.
+  const facingModeRef = useRef<FacingMode>("user");
 
   const [status, setStatus] = useState<Status>("idle");
   const [name, setName] = useState("Market Stall Scan");
   const [hazardCount, setHazardCount] = useState(0);
   const [elapsed, setElapsed] = useState(0);
+  const [canFlip, setCanFlip] = useState(false);
 
   function stopTracks() {
     if (rafRef.current !== null)
@@ -75,6 +82,7 @@ export function PreventionScanner() {
   function reset() {
     stopTracks();
     recorderRef.current = null;
+    recordCanvasRef.current = null;
     chunksRef.current = [];
     finderRef.current = null;
     hazardsRef.current = [];
@@ -82,9 +90,11 @@ export function PreventionScanner() {
     pendingRef.current = new Set();
     seenRef.current = new Set();
     startedAtRef.current = 0;
+    facingModeRef.current = "user";
     setStatus("idle");
     setHazardCount(0);
     setElapsed(0);
+    setCanFlip(false);
   }
 
   async function analyzeKeyframe() {
@@ -136,15 +146,24 @@ export function PreventionScanner() {
   async function start() {
     setStatus("starting");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const stream = await getCameraStream(facingModeRef.current);
       streamRef.current = stream;
+      setCanFlip(await canFlipCamera());
       const video = videoRef.current;
       if (video) {
         video.srcObject = stream;
         await video.play();
       }
 
-      const recorder = new MediaRecorder(stream, {
+      // Record a canvas that the animation loop copies each live frame into,
+      // rather than the camera stream directly, so a mid-scan camera flip is
+      // captured seamlessly without restarting the recorder.
+      const recordCanvas = document.createElement("canvas");
+      recordCanvas.width = video?.videoWidth || 1280;
+      recordCanvas.height = video?.videoHeight || 720;
+      recordCanvasRef.current = recordCanvas;
+
+      const recorder = new MediaRecorder(recordCanvas.captureStream(), {
         mimeType: "video/webm",
         videoBitsPerSecond: PreventionConfig.VIDEO_BITS_PER_SECOND,
       });
@@ -162,10 +181,20 @@ export function PreventionScanner() {
       const tick = (time: number) => {
         rafRef.current = requestAnimationFrame(tick);
         setElapsed(Date.now() - startedAtRef.current);
+        const activeVideo = videoRef.current;
+        // Copy the live frame into the recording canvas every animation frame so
+        // the captured video stays smooth and follows a camera flip on its own.
+        const recordCanvas = recordCanvasRef.current;
+        if (activeVideo && activeVideo.videoWidth && recordCanvas) {
+          if (recordCanvas.width !== activeVideo.videoWidth || recordCanvas.height !== activeVideo.videoHeight) {
+            recordCanvas.width = activeVideo.videoWidth;
+            recordCanvas.height = activeVideo.videoHeight;
+          }
+          recordCanvas.getContext("2d")?.drawImage(activeVideo, 0, 0, recordCanvas.width, recordCanvas.height);
+        }
         if (time - previous < interval)
           return;
         previous = time;
-        const activeVideo = videoRef.current;
         const overlay = overlayRef.current;
         const finder = finderRef.current;
         if (!activeVideo || !overlay || !finder)
@@ -202,6 +231,31 @@ export function PreventionScanner() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not start the scan");
       reset();
+    }
+  }
+
+  // Switch between the front and rear camera in place. Only the source track is
+  // replaced, so the preview, hazard analysis, and canvas recording all continue
+  // uninterrupted with the new lens.
+  async function flipCamera() {
+    const current = streamRef.current;
+    if (status !== "recording" || !current)
+      return;
+    const next = oppositeFacingMode(facingModeRef.current);
+    let nextStream: MediaStream;
+    try {
+      nextStream = await getCameraStream(next);
+    } catch {
+      toast.error("Could not switch the camera");
+      return;
+    }
+    current.getTracks().forEach((track) => track.stop());
+    streamRef.current = nextStream;
+    facingModeRef.current = next;
+    const video = videoRef.current;
+    if (video) {
+      video.srcObject = nextStream;
+      await video.play();
     }
   }
 
@@ -271,6 +325,17 @@ export function PreventionScanner() {
                 </Badge>
                 <Badge variant="secondary">{hazardCount} found</Badge>
               </div>
+            ) : null}
+            {recording && canFlip ? (
+              <Button
+                size="icon"
+                variant="secondary"
+                onClick={flipCamera}
+                className="tooltip tooltip-left absolute right-3 top-3"
+                data-tooltip="Flip Camera"
+              >
+                <SwitchCamera />
+              </Button>
             ) : null}
           </div>
         </CardContent>
