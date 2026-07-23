@@ -1,5 +1,10 @@
 @AGENTS.md
 
+## Git
+
+- Never commit and never push. Leave changes staged or unstaged for the user to review and commit themselves.
+- Never add a co-author trailer to commits. All commits are authored solely by the user.
+
 ## Consistency First
 
 - Before implementing any solution, search the codebase for an existing pattern that solves the same problem and follow it. Reuse the established approach (routes, helpers, component props, naming) rather than inventing a new one — consistency makes the code easier to debug. Example: render documents via the existing `/api/<entity>/[id]/file` route as other pages do, instead of introducing a new endpoint.
