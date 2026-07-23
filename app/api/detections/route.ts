@@ -48,6 +48,12 @@ export async function POST(request: NextRequest) {
     monitor.last_alert_at === null || now - monitor.last_alert_at >= cooldownSeconds * 1000;
   const shouldAlert = confidentEnough && outsideCooldown;
 
+  // Only alerted detections are recorded, so low-confidence noise and a
+  // sustained fire (still inside the per-monitor cooldown) never reach the
+  // Recent Detections feed. Anything below the alert bar is dropped here.
+  if (!shouldAlert)
+    return NextResponse.json({ detection: null });
+
   const detectionRef = adminDb.collection(Detection.COLLECTION).doc();
   const detection: Detection = {
     id: detectionRef.id,
@@ -63,17 +69,12 @@ export async function POST(request: NextRequest) {
   const file = adminStorage.bucket().file(`${Storage.PROOF_PREFIX}/${detectionRef.id}.jpg`);
   await file.save(buffer, { contentType: Storage.PROOF_CONTENT_TYPE });
 
-  // Email the alert only for confident detections that are outside the
-  // per-monitor cooldown, so low-confidence noise and a sustained fire do not
-  // send hundreds of emails. Every detection is still recorded.
-  if (shouldAlert) {
-    try {
-      await sendFireAlert(monitor, detection, buffer);
-      detection.email_sent = true;
-      await monitorRef.update({ last_alert_at: now });
-    } catch (error) {
-      console.error("Failed to send fire alert", error);
-    }
+  try {
+    await sendFireAlert(monitor, detection, buffer);
+    detection.email_sent = true;
+    await monitorRef.update({ last_alert_at: now });
+  } catch (error) {
+    console.error("Failed to send fire alert", error);
   }
 
   await detectionRef.set(detection);
