@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Fire Watch",
+  title: "Firewatch",
   description: "Turn any device into a fire monitor with in-browser detection and instant email alerts.",
 };
 

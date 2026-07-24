@@ -1,8 +1,8 @@
-# Fire Watch
+# Firewatch
 
 Turn any laptop into a fire monitor. Users Sign In, open the monitor page on a
 device, and that device streams its webcam and runs an open-source computer
-vision model in the browser to detect fire. When fire is detected, Fire Watch
+vision model in the browser to detect fire. When fire is detected, Firewatch
 captures a proof frame and emails an alert (via Resend) naming the monitor and
 reminding recipients to contact the fire authorities.
 
