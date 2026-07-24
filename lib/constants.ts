@@ -20,7 +20,7 @@ export const DetectorConfig = {
   MODEL_PATH: "/models/fire.onnx",
   MODEL_INPUT_SIZE: 640,
   // Minimum confidence for the ONNX model to count a detection as fire.
-  CONFIDENCE_THRESHOLD: 0.4,
+  CONFIDENCE_THRESHOLD: 0.7,
   // Detection loop cadence. Inference is expensive, so we throttle well below 60fps.
   TARGET_FPS: 3,
   // Heuristic detector: fraction of fire-colored pixels required in a frame.
