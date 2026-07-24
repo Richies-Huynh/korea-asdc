@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, CircleStop, ShieldAlert, SwitchCamera } from "lucide-react";
 import { toast } from "sonner";
-import { canFlipCamera, getCameraStream, oppositeFacingMode, type FacingMode } from "@/lib/camera";
+import { canFlipCamera, getCameraStream, getFlippedCameraStream, type FacingMode } from "@/lib/camera";
 import { PreventionConfig } from "@/lib/constants";
 import { Hazard } from "@/lib/types";
 import { HotRegionFinder, type NormalizedBox } from "@/lib/prevention/hot-regions";
@@ -234,24 +234,25 @@ export function PreventionScanner() {
     }
   }
 
-  // Switch between the front and rear camera in place. Only the source track is
-  // replaced, so the preview, hazard analysis, and canvas recording all continue
-  // uninterrupted with the new lens.
+  // Switch to the next camera in place. On multi-camera devices this cycles
+  // through the deviceIds; on mobile it toggles the front/rear lens. Only the
+  // source track is replaced, so the preview, hazard analysis, and canvas
+  // recording all continue uninterrupted with the new camera.
   async function flipCamera() {
     const current = streamRef.current;
     if (status !== "recording" || !current)
       return;
-    const next = oppositeFacingMode(facingModeRef.current);
-    let nextStream: MediaStream;
+    let flipped: { stream: MediaStream; facingMode: FacingMode };
     try {
-      nextStream = await getCameraStream(next);
+      flipped = await getFlippedCameraStream(current, facingModeRef.current);
     } catch {
       toast.error("Could not switch the camera");
       return;
     }
+    const nextStream = flipped.stream;
     current.getTracks().forEach((track) => track.stop());
     streamRef.current = nextStream;
-    facingModeRef.current = next;
+    facingModeRef.current = flipped.facingMode;
     const video = videoRef.current;
     if (video) {
       video.srcObject = nextStream;
