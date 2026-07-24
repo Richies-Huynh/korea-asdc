@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { createDetector, type DetectionResult, type Detector } from "@/lib/detector/detector";
 import { canFlipCamera, getCameraStream, getFlippedCameraStream, type FacingMode } from "@/lib/camera";
 import { DetectorConfig } from "@/lib/constants";
-import { LiveSession, Monitor } from "@/lib/types";
+import { Detection, LiveSession, Monitor } from "@/lib/types";
 import {
   RTC_CONFIG,
   candidatesCollection,
@@ -157,7 +157,13 @@ export function MonitorProvider({ children }: { children: React.ReactNode }) {
       Object.entries(payload).forEach(([key, value]) => formData.append(key, value));
 
       const response = await fetch("/api/detections", { method: "POST", body: formData });
-      if (response.ok) {
+      if (!response.ok)
+        return;
+      // Only alerted detections (>= 70% confidence, outside cooldown) are stored
+      // and returned; anything below the alert bar comes back as null, so no
+      // toast fires for low-confidence noise.
+      const { detection } = (await response.json()) as { detection: Detection | null };
+      if (detection) {
         setAlertCount((count) => count + 1);
         toast.error(`Fire detected on ${current.name}`);
       }
