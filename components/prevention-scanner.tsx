@@ -329,13 +329,12 @@ export function PreventionScanner() {
             ) : null}
             {recording && canFlip ? (
               <Button
-                size="icon"
                 variant="secondary"
                 onClick={flipCamera}
-                className="tooltip tooltip-left absolute right-3 top-3"
-                data-tooltip="Flip Camera"
+                className="absolute right-3 top-3 gap-1.5 shadow-md"
               >
                 <SwitchCamera />
+                Flip Camera
               </Button>
             ) : null}
           </div>

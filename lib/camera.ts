@@ -21,17 +21,20 @@ function cameraErrorMessage(error: unknown): string {
 }
 
 // Request the device camera, preferring the front ("user") or rear
-// ("environment") lens. The constraint is non-exact, so a device with a single
-// camera (most desktops) still returns that camera rather than failing. Camera
-// failures are rethrown with an actionable message so callers can surface it
-// directly.
-export async function getCameraStream(facingMode: FacingMode): Promise<MediaStream> {
+// ("environment") lens. By default the constraint is non-exact, so a device
+// with a single camera (most desktops) still returns that camera rather than
+// failing. Pass exact to demand the given lens, which forces the browser to
+// actually switch on a phone rather than possibly handing back the same camera.
+// Camera failures are rethrown with an actionable message so callers can
+// surface it directly.
+export async function getCameraStream(facingMode: FacingMode, exact = false): Promise<MediaStream> {
   // getUserMedia is only exposed on a secure (HTTPS or localhost) origin, where
   // navigator.mediaDevices is otherwise undefined.
   if (!navigator.mediaDevices)
     throw new Error("Camera access needs a secure (HTTPS) connection.");
   try {
-    return await navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false });
+    const facingConstraint = exact ? { exact: facingMode } : facingMode;
+    return await navigator.mediaDevices.getUserMedia({ video: { facingMode: facingConstraint }, audio: false });
   } catch (error) {
     throw new Error(cameraErrorMessage(error));
   }
@@ -57,37 +60,52 @@ export async function getVideoInputDevices(): Promise<MediaDeviceInfo[]> {
   return devices.filter((device) => device.kind === "videoinput");
 }
 
-// Whether a flip control would do anything on this device. Touch devices (coarse
-// pointer) are always treated as flippable: mobile browsers (iOS Safari, and
-// several Android browsers) report a single videoinput even when both a front
-// and rear lens exist, so gating them on a device count would wrongly hide the
-// control on exactly the devices that need it. There a flip falls back to
-// toggling facingMode. Everything else (laptops, desktops) is flippable only
-// when it actually exposes two or more cameras to switch between.
+// Whether a flip should switch the front/rear lens via facingMode rather than
+// cycle through deviceIds. True on touch devices (coarse pointer) — phones and
+// tablets — where a "flip" means the front/rear lens and facingMode expresses
+// that directly and reliably. It stays true even though modern mobile browsers
+// now expose each lens as its own deviceId: cycling those ids is unreliable
+// there because a track's reported deviceId often does not match any id from
+// enumerateDevices (notably iOS Safari), so the cycle lands back on the same
+// lens and the flip appears to do nothing. Everything else (laptops, desktops)
+// has no meaningful facingMode and flips by cycling deviceIds instead.
+function prefersFacingModeFlip(): boolean {
+  return window.matchMedia("(pointer: coarse)").matches;
+}
+
+// Whether a flip control would do anything on this device. Touch devices always
+// can (front/rear lens). Everything else is flippable only when it actually
+// exposes two or more cameras to switch between.
 export async function canFlipCamera(): Promise<boolean> {
-  if (window.matchMedia("(pointer: coarse)").matches)
+  if (prefersFacingModeFlip())
     return true;
   const videoInputs = await getVideoInputDevices();
   return videoInputs.length > 1;
 }
 
-// Open the "next" camera relative to the one currently in use. On devices that
-// expose more than one camera we cycle to the next deviceId (wrapping around),
-// which is the only way to switch between two webcams that share a facingMode.
-// On devices that report a single videoinput (typically mobile) we toggle the
-// facingMode instead, switching between the front and rear lens. The returned
-// facingMode reflects the new lens so a caller tracking it stays accurate.
+// Open the "next" camera relative to the one currently in use. On touch devices
+// we toggle the facingMode, switching between the front and rear lens; the
+// switch is requested as exact so the browser actually changes lens rather than
+// possibly returning the same one, falling back to a non-exact request if that
+// lens cannot be opened. On everything else we cycle to the next deviceId
+// (wrapping around), the only way to switch between webcams that share a
+// facingMode. The returned facingMode reflects the new lens so a caller tracking
+// it stays accurate.
 export async function getFlippedCameraStream(
   current: MediaStream,
   facingMode: FacingMode,
 ): Promise<{ stream: MediaStream; facingMode: FacingMode }> {
-  const videoInputs = await getVideoInputDevices();
-  if (videoInputs.length > 1) {
-    const currentDeviceId = current.getVideoTracks()[0]?.getSettings().deviceId;
-    const currentIndex = videoInputs.findIndex((device) => device.deviceId === currentDeviceId);
-    const next = videoInputs[(currentIndex + 1) % videoInputs.length];
-    return { stream: await getCameraStreamByDeviceId(next.deviceId), facingMode };
+  if (prefersFacingModeFlip()) {
+    const next = oppositeFacingMode(facingMode);
+    try {
+      return { stream: await getCameraStream(next, true), facingMode: next };
+    } catch {
+      return { stream: await getCameraStream(next), facingMode: next };
+    }
   }
-  const next = oppositeFacingMode(facingMode);
-  return { stream: await getCameraStream(next), facingMode: next };
+  const videoInputs = await getVideoInputDevices();
+  const currentDeviceId = current.getVideoTracks()[0]?.getSettings().deviceId;
+  const currentIndex = videoInputs.findIndex((device) => device.deviceId === currentDeviceId);
+  const next = videoInputs[(currentIndex + 1) % videoInputs.length];
+  return { stream: await getCameraStreamByDeviceId(next.deviceId), facingMode };
 }
