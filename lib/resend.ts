@@ -27,7 +27,7 @@ export async function sendFireAlert(
       </table>
       <p style="color: #6b7280;">Proof frame captured at the moment of detection:</p>
       <img src="cid:fire-frame" alt="Captured frame showing the detected fire" style="max-width: 100%; border-radius: 8px; border: 1px solid #e5e7eb;" />
-      <p style="color: #9ca3af; font-size: 12px; margin-top: 24px;">This alert was generated automatically by Fire Watch. Please verify and escalate to emergency services.</p>
+      <p style="color: #9ca3af; font-size: 12px; margin-top: 24px;">This alert was generated automatically by Firewatch. Please verify and escalate to emergency services.</p>
     </div>
   `;
 

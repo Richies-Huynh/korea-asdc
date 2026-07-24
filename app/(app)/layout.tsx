@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-3">
             <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
               <Flame className="size-5 text-red-500" />
-              Fire Watch
+              Firewatch
             </Link>
             <MainNav displayName={user.display_name} />
           </div>
