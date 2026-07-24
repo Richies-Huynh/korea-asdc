@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { onSnapshot, updateDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { createDetector, type DetectionResult, type Detector } from "@/lib/detector/detector";
-import { canFlipCamera, getCameraStream, oppositeFacingMode, type FacingMode } from "@/lib/camera";
+import { canFlipCamera, getCameraStream, getFlippedCameraStream, type FacingMode } from "@/lib/camera";
 import { DetectorConfig } from "@/lib/constants";
 import { LiveSession, Monitor } from "@/lib/types";
 import {
@@ -248,21 +248,22 @@ export function MonitorProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Switch between the front and rear camera in place. The new track is handed
-  // to every live viewer via replaceTrack, so no connection is renegotiated, and
-  // the detector keeps reading from the same hidden video.
+  // Switch to the next camera in place. On multi-camera devices this cycles
+  // through the deviceIds; on mobile it toggles the front/rear lens. The new
+  // track is handed to every live viewer via replaceTrack, so no connection is
+  // renegotiated, and the detector keeps reading from the same hidden video.
   async function flipCamera() {
     const current = streamRef.current;
     if (status !== "running" || !current)
       return;
-    const next = oppositeFacingMode(facingModeRef.current);
-    let nextStream: MediaStream;
+    let flipped: { stream: MediaStream; facingMode: FacingMode };
     try {
-      nextStream = await getCameraStream(next);
+      flipped = await getFlippedCameraStream(current, facingModeRef.current);
     } catch {
       toast.error("Could not switch the camera");
       return;
     }
+    const nextStream = flipped.stream;
     const nextTrack = nextStream.getVideoTracks()[0];
     peersRef.current.forEach(({ peerConnection }) => {
       const sender = peerConnection.getSenders().find((rtpSender) => rtpSender.track?.kind === "video");
@@ -270,7 +271,7 @@ export function MonitorProvider({ children }: { children: React.ReactNode }) {
     });
     current.getTracks().forEach((track) => track.stop());
     streamRef.current = nextStream;
-    facingModeRef.current = next;
+    facingModeRef.current = flipped.facingMode;
     setStream(nextStream);
     const video = videoRef.current;
     if (video) {
